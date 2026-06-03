@@ -5,7 +5,7 @@ export default function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-12">
       <div className="mb-10 text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-white">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-lime-600 text-white">
           <Dumbbell className="h-8 w-8" />
         </div>
         <h1 className="text-3xl font-bold tracking-tight">SmarPt</h1>
@@ -21,7 +21,7 @@ export default function HomePage() {
           href="/login?role=member"
           className="flex items-center gap-4 rounded-2xl bg-white p-5 shadow-sm transition hover:shadow-md"
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-lime-50 text-lime-600">
             <Dumbbell className="h-6 w-6" />
           </div>
           <div>
@@ -34,7 +34,7 @@ export default function HomePage() {
           href="/login?role=trainer"
           className="flex items-center gap-4 rounded-2xl bg-white p-5 shadow-sm transition hover:shadow-md"
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-lime-50 text-lime-700">
             <Users className="h-6 w-6" />
           </div>
           <div>
@@ -46,7 +46,7 @@ export default function HomePage() {
 
       <p className="mt-8 text-center text-sm text-gray-400">
         계정이 없으신가요?{" "}
-        <Link href="/signup" className="font-medium text-blue-600">
+        <Link href="/signup" className="font-medium text-lime-600">
           회원가입
         </Link>
       </p>

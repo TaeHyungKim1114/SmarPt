@@ -39,6 +39,7 @@ export type MealEntry = {
   meal_type: "breakfast" | "lunch" | "dinner" | "snack";
   foods: string;
   calories?: number | null;
+  photo_url?: string | null;
 };
 
 export type DietLog = {

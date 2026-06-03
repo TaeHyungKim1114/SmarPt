@@ -1,129 +1,165 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ChevronRight, Copy, Users } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Copy, LayoutDashboard, RefreshCw, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  fetchTrainerDashboard,
+  type TrainerDashboardData,
+} from "@/lib/trainer-dashboard";
+import { AtRiskAlert } from "@/components/trainer/AtRiskAlert";
+import { DailyReportModal } from "@/components/trainer/DailyReportModal";
+import { MemberTable } from "@/components/trainer/MemberTable";
+import { StatCards } from "@/components/trainer/StatCards";
 import type { Profile } from "@/lib/types";
 
-type MemberWithProfile = {
-  member_id: string;
-  member: Profile;
-};
-
-export default function TrainerHomePage() {
+export default function TrainerDashboardPage() {
   const supabase = createClient();
-  const [inviteCode, setInviteCode] = useState<string | null>(null);
-  const [members, setMembers] = useState<MemberWithProfile[]>([]);
+  const [data, setData] = useState<TrainerDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [reportMember, setReportMember] = useState<Profile | null>(null);
 
-  useEffect(() => {
-    const load = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("invite_code, full_name")
-        .eq("id", user.id)
-        .single();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      setInviteCode(profile?.invite_code ?? null);
+    if (!user) {
+      setError("로그인이 필요합니다.");
+      setLoading(false);
+      return;
+    }
 
-      const { data: links } = await supabase
-        .from("trainer_members")
-        .select("member_id")
-        .eq("trainer_id", user.id);
-
-      const ids = (links || []).map((l) => l.member_id);
-      if (ids.length === 0) {
-        setMembers([]);
-        return;
-      }
-
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("*")
-        .in("id", ids);
-
-      setMembers(
-        (profiles || []).map((member) => ({
-          member_id: member.id,
-          member,
-        }))
+    try {
+      const dashboard = await fetchTrainerDashboard(user.id);
+      setData(dashboard);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "대시보드 데이터를 불러오지 못했습니다."
       );
-    };
-    load();
+    } finally {
+      setLoading(false);
+    }
   }, [supabase]);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   const copyCode = () => {
-    if (!inviteCode) return;
-    navigator.clipboard.writeText(inviteCode);
+    if (!data?.inviteCode) return;
+    navigator.clipboard.writeText(data.inviteCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  if (loading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center px-4">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <RefreshCw className="h-4 w-4 animate-spin" />
+          대시보드 불러오는 중...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 py-8">
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
+          {error}
+        </p>
+        <button type="button" onClick={load} className="btn-primary mt-4">
+          다시 시도
+        </button>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const { stats, members, trainerName, inviteCode } = data;
+
   return (
     <div className="px-4 py-6">
-      <header className="mb-6">
-        <h1 className="text-xl font-bold">내 회원</h1>
-        <p className="text-sm text-gray-500">회원별 운동·식단·채팅</p>
+      <header className="mb-6 flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2 text-lime-600">
+            <LayoutDashboard className="h-5 w-5" />
+            <span className="text-xs font-semibold uppercase tracking-wide">
+              Business Dashboard
+            </span>
+          </div>
+          <h1 className="text-xl font-bold">
+            {trainerName}님, 회원 관리
+          </h1>
+          <p className="mt-0.5 text-sm text-gray-500">
+            담당 회원 활동·이탈 위험을 한눈에 확인하세요
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          className="shrink-0 rounded-xl border border-gray-200 bg-white p-2.5 text-gray-600 hover:bg-gray-50"
+          aria-label="새로고침"
+        >
+          <RefreshCw className="h-4 w-4" />
+        </button>
       </header>
 
+      <AtRiskAlert members={stats.atRiskMembers} />
+
+      <section className="mb-6 mt-6">
+        <StatCards
+          totalMembers={stats.totalMembers}
+          todayCompletionRate={stats.todayCompletionRate}
+          weeklyEngagementRate={stats.weeklyEngagementRate}
+        />
+      </section>
+
       {inviteCode && (
-        <div className="card mb-6 border border-blue-100 bg-blue-50/50">
-          <p className="text-sm font-medium text-gray-600">회원 초대 코드</p>
-          <div className="mt-2 flex items-center justify-between">
-            <span className="text-2xl font-bold tracking-widest text-blue-600">
+        <div className="card mb-6 flex items-center justify-between gap-3 border border-lime-100 bg-lime-50/40 py-3">
+          <div>
+            <p className="text-xs font-medium text-gray-500">회원 초대 코드</p>
+            <p className="font-mono text-lg font-bold tracking-widest whitespace-nowrap text-lime-600">
               {inviteCode}
-            </span>
-            <button
-              type="button"
-              onClick={copyCode}
-              className="flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-sm font-medium shadow-sm"
-            >
-              <Copy className="h-4 w-4" />
-              {copied ? "복사됨!" : "복사"}
-            </button>
+            </p>
           </div>
-          <p className="mt-2 text-xs text-gray-500">
-            회원이 가입 시 이 코드를 입력하면 자동 연결됩니다
-          </p>
+          <button
+            type="button"
+            onClick={copyCode}
+            className="flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-sm font-medium shadow-sm"
+          >
+            <Copy className="h-4 w-4" />
+            {copied ? "복사됨" : "복사"}
+          </button>
         </div>
       )}
 
-      {members.length === 0 ? (
-        <div className="card py-12 text-center">
-          <Users className="mx-auto mb-3 h-10 w-10 text-gray-300" />
-          <p className="text-gray-500">아직 연결된 회원이 없습니다</p>
-          <p className="mt-1 text-sm text-gray-400">
-            초대 코드를 회원에게 공유하세요
-          </p>
+      <section>
+        <div className="mb-3 flex items-center gap-2">
+          <Users className="h-4 w-4 text-gray-500" />
+          <h2 className="font-bold">담당 회원 목록</h2>
+          <span className="text-sm text-gray-400">({members.length}명)</span>
         </div>
-      ) : (
-        <ul className="space-y-2">
-          {members.map(({ member_id, member }) => (
-            <li key={member_id}>
-              <Link
-                href={`/trainer/member/${member_id}`}
-                className="card flex items-center justify-between transition hover:shadow-md"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-600">
-                    {member.full_name?.[0] || "?"}
-                  </div>
-                  <div>
-                    <p className="font-semibold">{member.full_name}</p>
-                    <p className="text-xs text-gray-400">{member.email}</p>
-                  </div>
-                </div>
-                <ChevronRight className="h-5 w-5 text-gray-300" />
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <MemberTable
+          members={members}
+          onOpenDailyReport={setReportMember}
+        />
+      </section>
+
+      {reportMember && (
+        <DailyReportModal
+          member={reportMember}
+          open={!!reportMember}
+          onClose={() => setReportMember(null)}
+        />
       )}
     </div>
   );

@@ -1,9 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Trash2, GripVertical } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Plus, Trash2, GripVertical } from "lucide-react";
 import type { WorkoutExercise, WorkoutSet } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
+import { syncExercisesFromWorkout } from "@/lib/sync-member-data";
+import {
+  appendDurationToNotes,
+  loadWorkoutSession,
+  parseRestDurationSec,
+  parseWorkoutDurationSec,
+} from "@/lib/workout-session";
+import { calculateTotalVolumeKg } from "@/lib/workout-stats";
+import { useWorkoutSession } from "@/hooks/useWorkoutSession";
+import { WorkoutCompletionCard } from "@/components/workout/WorkoutCompletionCard";
+import { WorkoutStopwatches } from "@/components/workout/WorkoutStopwatches";
+import {
+  QuickAddPanel,
+  WorkoutStartModal,
+} from "@/components/workout/QuickAddPanel";
 
 type WorkoutEditorProps = {
   workoutId: string | null;
@@ -15,10 +30,17 @@ type WorkoutEditorProps = {
   readOnly?: boolean;
 };
 
-const DEFAULT_EXERCISES = ["벤치프레스", "스쿼트", "데드리프트", "랫풀다운", "숄더프레스"];
-
 function emptySet(): WorkoutSet {
-  return { weight: null, reps: null, completed: true };
+  return { weight: null, reps: null, completed: false };
+}
+
+function normalizeSets(sets: WorkoutSet[]): WorkoutSet[] {
+  if (!sets.length) return [emptySet()];
+  return sets.map((s) => ({
+    weight: s.weight ?? null,
+    reps: s.reps ?? null,
+    completed: s.completed ?? false,
+  }));
 }
 
 export function WorkoutEditor({
@@ -38,20 +60,148 @@ export function WorkoutEditor({
       ? initialExercises.map((e) => ({
           id: e.id,
           name: e.name,
-          sets: e.sets.length ? e.sets : [emptySet()],
+          sets: normalizeSets(e.sets),
           memo: e.memo || "",
         }))
       : []
   );
   const [notes, setNotes] = useState(initialNotes);
   const [saving, setSaving] = useState(false);
+  const [showStartModal, setShowStartModal] = useState(false);
+  const [pendingAdd, setPendingAdd] = useState<string | undefined>(undefined);
+  const lastExerciseRef = useRef<HTMLDivElement>(null);
+  const prevExerciseCountRef = useRef(exercises.length);
+  const syncedWorkoutIdRef = useRef<string | null | undefined>(undefined);
+  const userEditingRef = useRef(false);
 
-  const addExercise = (name?: string) => {
+  const [workoutEnded, setWorkoutEnded] = useState(() => {
+    if (readOnly) return true;
+    const active = loadWorkoutSession(memberId, date).started;
+    if (active) return false;
+    return Boolean(workoutId) || initialExercises.length > 0;
+  });
+
+  const [savedSummary, setSavedSummary] = useState<{
+    workoutSec: number;
+    volumeKg: number;
+  } | null>(() => {
+    if (!workoutId && initialExercises.length === 0) return null;
+    return {
+      workoutSec: parseWorkoutDurationSec(initialNotes),
+      volumeKg: calculateTotalVolumeKg(
+        initialExercises.map((e) => ({ sets: normalizeSets(e.sets) }))
+      ),
+    };
+  });
+
+  const {
+    session,
+    startWorkout,
+    resumeWorkout,
+    endWorkoutSession,
+    toggleWorkout,
+    resetWorkout,
+    toggleRest,
+    resetRest,
+    getElapsedNow,
+  } = useWorkoutSession(memberId, date);
+
+  const showTimers = !readOnly && session.started && !workoutEnded;
+
+  useEffect(() => {
     if (readOnly) return;
+    const stored = loadWorkoutSession(memberId, date);
+    if (stored.started) {
+      setWorkoutEnded(false);
+      userEditingRef.current = true;
+    }
+  }, [memberId, date, readOnly]);
+
+  useEffect(() => {
+    if (readOnly) return;
+    if (
+      syncedWorkoutIdRef.current === workoutId &&
+      syncedWorkoutIdRef.current !== undefined
+    ) {
+      return;
+    }
+    syncedWorkoutIdRef.current = workoutId;
+
+    if (initialExercises.length > 0) {
+      setExercises(
+        initialExercises.map((e) => ({
+          id: e.id,
+          name: e.name,
+          sets: normalizeSets(e.sets),
+          memo: e.memo || "",
+        }))
+      );
+    }
+    setNotes(initialNotes);
+
+    const stored = loadWorkoutSession(memberId, date);
+    if (!userEditingRef.current && !stored.started && workoutId) {
+      setWorkoutEnded(true);
+      setSavedSummary({
+        workoutSec: parseWorkoutDurationSec(initialNotes),
+        volumeKg: calculateTotalVolumeKg(
+          initialExercises.map((e) => ({ sets: normalizeSets(e.sets) }))
+        ),
+      });
+    }
+  }, [workoutId, initialExercises, initialNotes, memberId, date, readOnly]);
+
+  useEffect(() => {
+    if (exercises.length <= prevExerciseCountRef.current) {
+      prevExerciseCountRef.current = exercises.length;
+      return;
+    }
+    prevExerciseCountRef.current = exercises.length;
+    const timer = window.setTimeout(() => {
+      const el = lastExerciseRef.current;
+      if (!el) return;
+      const top =
+        el.getBoundingClientRect().bottom +
+        window.scrollY -
+        window.innerHeight +
+        160;
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [exercises.length]);
+
+  const addExerciseDirect = (name?: string) => {
     setExercises((prev) => [
       ...prev,
-      { name: name || "", sets: [emptySet(), emptySet(), emptySet()], memo: "" },
+      {
+        name: name || "",
+        sets: [emptySet(), emptySet(), emptySet()],
+        memo: "",
+      },
     ]);
+  };
+
+  const requestAddExercise = (name?: string) => {
+    if (readOnly || workoutEnded) return;
+    if (!session.started) {
+      setPendingAdd(name);
+      setShowStartModal(true);
+      return;
+    }
+    addExerciseDirect(name);
+  };
+
+  const confirmStartWorkout = () => {
+    userEditingRef.current = true;
+    startWorkout();
+    setShowStartModal(false);
+    addExerciseDirect(pendingAdd);
+    setPendingAdd(undefined);
+  };
+
+  const cancelStartWorkout = () => {
+    setShowStartModal(false);
+    setPendingAdd(undefined);
   };
 
   const updateSet = (
@@ -66,6 +216,19 @@ export function WorkoutEditor({
       sets[setIdx] = {
         ...sets[setIdx],
         [field]: value === "" ? null : Number(value),
+      };
+      next[exIdx] = { ...next[exIdx], sets };
+      return next;
+    });
+  };
+
+  const toggleSetCompleted = (exIdx: number, setIdx: number) => {
+    setExercises((prev) => {
+      const next = [...prev];
+      const sets = [...next[exIdx].sets];
+      sets[setIdx] = {
+        ...sets[setIdx],
+        completed: !sets[setIdx].completed,
       };
       next[exIdx] = { ...next[exIdx], sets };
       return next;
@@ -87,16 +250,37 @@ export function WorkoutEditor({
     setExercises((prev) => prev.filter((_, i) => i !== exIdx));
   };
 
+  const resumeEditing = () => {
+    userEditingRef.current = true;
+    setWorkoutEnded(false);
+    resumeWorkout({
+      workoutElapsedSec:
+        savedSummary?.workoutSec ?? parseWorkoutDurationSec(notes),
+      restElapsedSec: parseRestDurationSec(notes),
+    });
+  };
+
   const save = async () => {
-    if (readOnly) return;
+    if (readOnly || workoutEnded) return;
     setSaving(true);
+
+    const elapsed = getElapsedNow();
+    const finalWorkoutSec = elapsed.workoutElapsedSec;
+    const finalRestSec = elapsed.restElapsedSec;
+    const finalVolumeKg = calculateTotalVolumeKg(exercises);
+
+    const notesWithDuration = appendDurationToNotes(
+      notes,
+      finalWorkoutSec,
+      finalRestSec
+    );
 
     let wId = workoutId;
 
     if (!wId) {
       const { data, error } = await supabase
         .from("workouts")
-        .insert({ member_id: memberId, workout_date: date, notes })
+        .insert({ member_id: memberId, workout_date: date, notes: notesWithDuration })
         .select("id")
         .single();
       if (error) {
@@ -119,7 +303,7 @@ export function WorkoutEditor({
     } else {
       await supabase
         .from("workouts")
-        .update({ notes, updated_at: new Date().toISOString() })
+        .update({ notes: notesWithDuration, updated_at: new Date().toISOString() })
         .eq("id", wId);
     }
 
@@ -144,32 +328,72 @@ export function WorkoutEditor({
       await supabase.from("workout_exercises").insert(toInsert);
     }
 
+    try {
+      await syncExercisesFromWorkout(supabase, memberId, date, wId);
+    } catch (e) {
+      console.warn("exercises sync", e);
+    }
+
+    endWorkoutSession();
+    userEditingRef.current = false;
+
+    setSavedSummary({
+      workoutSec: finalWorkoutSec,
+      volumeKg: finalVolumeKg,
+    });
+    setWorkoutEnded(true);
+    setNotes(notesWithDuration);
+
     setSaving(false);
     onSaved();
   };
 
-  return (
-    <div className="space-y-4">
-      {!readOnly && exercises.length === 0 && (
-        <div className="card">
-          <p className="mb-3 text-sm text-gray-500">빠른 추가</p>
-          <div className="flex flex-wrap gap-2">
-            {DEFAULT_EXERCISES.map((name) => (
-              <button
-                key={name}
-                type="button"
-                onClick={() => addExercise(name)}
-                className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700"
-              >
-                + {name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+  const isEmpty = exercises.length === 0;
+  const editing = !readOnly && !workoutEnded;
 
-      {exercises.map((ex, exIdx) => (
-        <div key={exIdx} className="card">
+  return (
+    <div className={`space-y-4 ${showTimers ? "pb-44" : ""}`}>
+      <WorkoutStartModal
+        open={showStartModal}
+        onConfirm={confirmStartWorkout}
+        onCancel={cancelStartWorkout}
+      />
+
+      {readOnly &&
+        savedSummary &&
+        (savedSummary.workoutSec > 0 || savedSummary.volumeKg > 0) && (
+          <WorkoutCompletionCard
+            workoutSec={savedSummary.workoutSec}
+            volumeKg={savedSummary.volumeKg}
+            compact
+          />
+        )}
+
+      {isEmpty && readOnly ? (
+        <div className="card py-8 text-center text-sm text-gray-400">
+          운동 기록이 없습니다
+        </div>
+      ) : isEmpty && !readOnly ? (
+        <button
+          type="button"
+          onClick={() => requestAddExercise()}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 py-4 text-sm font-medium text-gray-500"
+        >
+          <Plus className="h-4 w-4" />
+          운동 추가
+        </button>
+      ) : (
+        <>
+          {editing && (
+            <QuickAddPanel memberId={memberId} onAdd={requestAddExercise} />
+          )}
+
+          {exercises.map((ex, exIdx) => (
+        <div
+          key={exIdx}
+          ref={exIdx === exercises.length - 1 ? lastExerciseRef : undefined}
+          className="card"
+        >
           <div className="mb-3 flex items-center gap-2">
             <GripVertical className="h-4 w-4 text-gray-300" />
             {readOnly ? (
@@ -186,7 +410,7 @@ export function WorkoutEditor({
                 }}
               />
             )}
-            {!readOnly && (
+            {editing && (
               <button
                 type="button"
                 onClick={() => removeExercise(exIdx)}
@@ -197,31 +421,60 @@ export function WorkoutEditor({
             )}
           </div>
 
-          <div className="mb-2 grid grid-cols-[2rem_1fr_1fr] gap-2 text-xs font-medium text-gray-400">
-            <span>세트</span>
-            <span className="text-center">kg</span>
-            <span className="text-center">회</span>
+          <div className="mb-2 grid grid-cols-[2.25rem_1.75rem_1fr_1fr] gap-2 text-xs font-medium text-gray-400">
+            <span className="text-center">완료</span>
+            <span className="text-center">세트</span>
+            <span className="block w-full text-center">kg</span>
+            <span className="block w-full text-center">회</span>
           </div>
 
           {ex.sets.map((set, setIdx) => (
             <div
               key={setIdx}
-              className="mb-2 grid grid-cols-[2rem_1fr_1fr] items-center gap-2"
+              className={`mb-2 grid grid-cols-[2.25rem_1.75rem_1fr_1fr] items-center gap-2 rounded-xl transition ${
+                set.completed ? "bg-lime-50/80 ring-1 ring-lime-100" : ""
+              }`}
             >
+              {readOnly ? (
+                <span className="flex justify-center">
+                  {set.completed ? (
+                    <Check className="h-5 w-5 text-lime-600" />
+                  ) : (
+                    <span className="h-5 w-5 rounded border border-gray-200" />
+                  )}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => toggleSetCompleted(exIdx, setIdx)}
+                  className={`mx-auto flex h-8 w-8 items-center justify-center rounded-lg border-2 transition ${
+                    set.completed
+                      ? "border-lime-500 bg-lime-500 text-white"
+                      : "border-gray-200 bg-white text-transparent hover:border-lime-300"
+                  }`}
+                  aria-label={`세트 ${setIdx + 1} 완료`}
+                >
+                  <Check className="h-4 w-4" strokeWidth={3} />
+                </button>
+              )}
               <span className="text-center text-sm font-medium text-gray-500">
                 {setIdx + 1}
               </span>
               {readOnly ? (
                 <>
-                  <span className="text-center">{set.weight ?? "-"}</span>
-                  <span className="text-center">{set.reps ?? "-"}</span>
+                  <span className="block w-full text-center tabular-nums">
+                    {set.weight ?? "-"}
+                  </span>
+                  <span className="block w-full text-center tabular-nums">
+                    {set.reps ?? "-"}
+                  </span>
                 </>
               ) : (
                 <>
                   <input
                     type="number"
                     inputMode="decimal"
-                    className="input-field py-2 text-center"
+                    className="input-field py-2 text-center tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     placeholder="0"
                     value={set.weight ?? ""}
                     onChange={(e) =>
@@ -231,7 +484,7 @@ export function WorkoutEditor({
                   <input
                     type="number"
                     inputMode="numeric"
-                    className="input-field py-2 text-center"
+                    className="input-field py-2 text-center tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     placeholder="0"
                     value={set.reps ?? ""}
                     onChange={(e) =>
@@ -243,11 +496,11 @@ export function WorkoutEditor({
             </div>
           ))}
 
-          {!readOnly && (
+          {editing && (
             <button
               type="button"
               onClick={() => addSet(exIdx)}
-              className="mt-2 text-sm font-medium text-blue-600"
+              className="mt-2 text-sm font-medium text-lime-600"
             >
               + 세트 추가
             </button>
@@ -255,23 +508,32 @@ export function WorkoutEditor({
         </div>
       ))}
 
-      {!readOnly && (
-        <button
-          type="button"
-          onClick={() => addExercise()}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 py-4 text-sm font-medium text-gray-500"
-        >
-          <Plus className="h-4 w-4" />
-          운동 추가
-        </button>
+          {editing && (
+            <button
+              type="button"
+              onClick={() => requestAddExercise()}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 py-4 text-sm font-medium text-gray-500"
+            >
+              <Plus className="h-4 w-4" />
+              운동 추가
+            </button>
+          )}
+        </>
       )}
 
+      {!isEmpty && (
       <div className="card">
         <label className="mb-2 block text-sm font-medium text-gray-600">
           메모
         </label>
         {readOnly ? (
-          <p className="text-sm text-gray-700">{notes || "메모 없음"}</p>
+          <p className="whitespace-pre-wrap text-sm text-gray-700">
+            {notes || "메모 없음"}
+          </p>
+        ) : workoutEnded ? (
+          <p className="whitespace-pre-wrap text-sm text-gray-700">
+            {notes || "메모 없음"}
+          </p>
         ) : (
           <textarea
             className="input-field min-h-[80px] resize-none"
@@ -281,16 +543,40 @@ export function WorkoutEditor({
           />
         )}
       </div>
+      )}
 
-      {!readOnly && (
+      {!readOnly && !isEmpty && !workoutEnded && (
         <button
           type="button"
           onClick={save}
           disabled={saving}
           className="btn-primary w-full"
         >
-          {saving ? "저장 중..." : "운동 기록 저장"}
+          {saving ? "종료 중..." : "운동 종료"}
         </button>
+      )}
+
+      {!readOnly && !isEmpty && workoutEnded && (
+        <button
+          type="button"
+          onClick={resumeEditing}
+          className="btn-secondary w-full"
+        >
+          운동 수정
+        </button>
+      )}
+
+      {showTimers && (
+        <WorkoutStopwatches
+          workoutSec={session.workoutElapsedSec}
+          workoutRunning={session.workoutRunning}
+          restSec={session.restElapsedSec}
+          restRunning={session.restRunning}
+          onToggleWorkout={toggleWorkout}
+          onResetWorkout={resetWorkout}
+          onToggleRest={toggleRest}
+          onResetRest={resetRest}
+        />
       )}
     </div>
   );

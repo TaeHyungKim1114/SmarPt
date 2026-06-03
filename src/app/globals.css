@@ -1,15 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f6f9;
+  --background: #f7f8f4;
   --foreground: #111827;
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
+  --primary: #65a30d;
+  --primary-dark: #4d7c0f;
+  --primary-light: #ecfccb;
   --surface: #ffffff;
   --muted: #6b7280;
   --border: #e5e7eb;
-  --workout-dot: #2563eb;
-  --diet-dot: #10b981;
+  --workout-dot: #84cc16;
+  --diet-dot: #22c55e;
+  --chart-primary: #84cc16;
+  --chart-secondary: #65a30d;
+  --chart-muted: #d9f99d;
 }
 
 @theme inline {
@@ -24,18 +28,20 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .btn-primary {
-  @apply rounded-xl bg-[var(--primary)] px-4 py-3 font-semibold text-white transition hover:bg-[var(--primary-dark)] disabled:opacity-50;
+  @apply rounded-xl bg-[var(--primary)] px-4 py-3 font-semibold whitespace-nowrap text-white transition hover:bg-[var(--primary-dark)] disabled:opacity-50;
 }
 
 .btn-secondary {
-  @apply rounded-xl border border-[var(--border)] bg-white px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-50;
+  @apply rounded-xl border border-[var(--border)] bg-white px-4 py-3 font-medium whitespace-nowrap text-gray-700 transition hover:bg-gray-50;
 }
 
 .input-field {
-  @apply w-full rounded-xl border border-[var(--border)] bg-white px-4 py-3 outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-blue-100;
+  @apply w-full rounded-xl border border-[var(--border)] bg-white px-4 py-3 outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-lime-100;
 }
 
 .card {

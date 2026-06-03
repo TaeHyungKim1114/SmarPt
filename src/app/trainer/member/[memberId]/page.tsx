@@ -2,7 +2,8 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, MessageCircle } from "lucide-react";
+import { ArrowLeft, ClipboardList, ListChecks } from "lucide-react";
+import { DailyReportModal } from "@/components/trainer/DailyReportModal";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 import { Calendar } from "@/components/Calendar";
@@ -30,6 +31,7 @@ export default function TrainerMemberDetailPage({
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [exercises, setExercises] = useState<WorkoutExercise[]>([]);
   const [dietLog, setDietLog] = useState<DietLog | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const dateStr = toDateString(selectedDate);
 
@@ -116,14 +118,24 @@ export default function TrainerMemberDetailPage({
           <ArrowLeft className="h-4 w-4" />
           회원 목록
         </Link>
-        {trainerId && (
-          <Link
-            href={`/trainer/member/${memberId}/chat`}
-            className="flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white"
-          >
-            <MessageCircle className="h-4 w-4" />
-            채팅
-          </Link>
+        {member && (
+          <div className="flex gap-2">
+            <Link
+              href={`/trainer/member/${memberId}/routine`}
+              className="flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700"
+            >
+              <ListChecks className="h-4 w-4" />
+              루틴
+            </Link>
+            <button
+              type="button"
+              onClick={() => setReportOpen(true)}
+              className="flex items-center gap-1 rounded-xl border border-lime-200 bg-lime-50 px-3 py-2 text-sm font-medium text-lime-700"
+            >
+              <ClipboardList className="h-4 w-4" />
+              요약
+            </button>
+          </div>
         )}
       </div>
 
@@ -147,7 +159,7 @@ export default function TrainerMemberDetailPage({
           onClick={() => setTab("workout")}
           className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition ${
             tab === "workout"
-              ? "bg-white text-blue-600 shadow-sm"
+              ? "bg-white text-lime-600 shadow-sm"
               : "text-gray-500"
           }`}
         >
@@ -200,6 +212,15 @@ export default function TrainerMemberDetailPage({
           )
         )}
       </div>
+
+      {member && (
+        <DailyReportModal
+          member={member}
+          reportDate={selectedDate}
+          open={reportOpen}
+          onClose={() => setReportOpen(false)}
+        />
+      )}
     </div>
   );
 }

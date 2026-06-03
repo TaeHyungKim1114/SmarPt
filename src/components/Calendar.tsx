@@ -85,9 +85,9 @@ export function Calendar({
               onClick={() => onSelectDate(day)}
               className={`mx-auto flex h-11 w-11 flex-col items-center justify-center rounded-full text-sm transition ${
                 isSelected
-                  ? "bg-blue-600 font-bold text-white"
+                  ? "bg-lime-600 font-bold text-white"
                   : isToday
-                    ? "bg-blue-50 font-semibold text-blue-600"
+                    ? "bg-lime-50 font-semibold text-lime-600"
                     : inMonth
                       ? "text-gray-800 hover:bg-gray-100"
                       : "text-gray-300"
@@ -98,7 +98,7 @@ export function Calendar({
                 {hasWorkout && (
                   <span
                     className={`h-1.5 w-1.5 rounded-full ${
-                      isSelected ? "bg-white" : "bg-blue-500"
+                      isSelected ? "bg-white" : "bg-lime-500"
                     }`}
                   />
                 )}
@@ -117,7 +117,7 @@ export function Calendar({
 
       <div className="mt-4 flex justify-center gap-4 text-xs text-gray-500">
         <span className="flex items-center gap-1">
-          <span className="h-2 w-2 rounded-full bg-blue-500" />
+          <span className="h-2 w-2 rounded-full bg-lime-500" />
           운동
         </span>
         <span className="flex items-center gap-1">

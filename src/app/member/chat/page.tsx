@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import { Chat } from "@/components/Chat";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile } from "@/lib/types";
+import { getTrainerLinkForMember } from "@/lib/trainer-link";
 import Link from "next/link";
 
 export default function MemberChatPage() {
   const supabase = createClient();
   const [userId, setUserId] = useState<string | null>(null);
-  const [trainer, setTrainer] = useState<Profile | null>(null);
   const [trainerId, setTrainerId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,23 +19,10 @@ export default function MemberChatPage() {
       if (!user) return;
       setUserId(user.id);
 
-      const { data: link } = await supabase
-        .from("trainer_members")
-        .select("trainer_id")
-        .eq("member_id", user.id)
-        .maybeSingle();
-
+      const link = await getTrainerLinkForMember(supabase, user.id);
       if (!link) return;
 
-      setTrainerId(link.trainer_id);
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", link.trainer_id)
-        .single();
-
-      setTrainer(profile);
+      setTrainerId(link.trainerId);
     };
     load();
   }, [supabase]);
@@ -72,7 +58,6 @@ export default function MemberChatPage() {
         trainerId={trainerId}
         memberId={userId}
         currentUserId={userId}
-        otherUser={trainer}
       />
     </div>
   );

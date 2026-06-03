@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { TrendingUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getTrainerLinkForMember } from "@/lib/trainer-link";
 import type { Profile } from "@/lib/types";
 
 export default function MemberProfilePage() {
@@ -27,17 +30,12 @@ export default function MemberProfilePage() {
         .single();
       setProfile(p);
 
-      const { data: link } = await supabase
-        .from("trainer_members")
-        .select("trainer_id")
-        .eq("member_id", user.id)
-        .maybeSingle();
-
+      const link = await getTrainerLinkForMember(supabase, user.id);
       if (link) {
         const { data: trainer } = await supabase
           .from("profiles")
           .select("full_name")
-          .eq("id", link.trainer_id)
+          .eq("id", link.trainerId)
           .single();
         setTrainerName(trainer?.full_name ?? null);
       }
@@ -60,17 +58,24 @@ export default function MemberProfilePage() {
       return;
     }
 
-    const { error } = await supabase.from("trainer_members").insert({
+    const { error: tmError } = await supabase.from("trainer_members").insert({
       trainer_id: trainer.id,
       member_id: profile.id,
     });
 
-    if (error) {
-      setMessage(error.message.includes("unique")
-        ? "이미 연결된 트레이너가 있습니다."
-        : error.message);
+    if (tmError && !tmError.message.includes("unique")) {
+      setMessage(tmError.message);
       return;
     }
+
+    await supabase.from("pt_connections").upsert(
+      {
+        trainer_id: trainer.id,
+        member_id: profile.id,
+        status: "active",
+      },
+      { onConflict: "trainer_id,member_id", ignoreDuplicates: false }
+    );
 
     setTrainerName(trainer.full_name);
     setMessage("트레이너와 연결되었습니다!");
@@ -87,6 +92,19 @@ export default function MemberProfilePage() {
     <div className="px-4 py-6">
       <h1 className="mb-6 text-xl font-bold">내 정보</h1>
 
+      <Link
+        href="/member/report"
+        className="card mb-4 flex items-center gap-3 border border-lime-200 bg-gradient-to-r from-lime-50 to-white p-4 transition hover:shadow-md"
+      >
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-lime-100">
+          <TrendingUp className="h-6 w-6 text-lime-600" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-gray-900">PT 성장 리포트</p>
+          <p className="text-sm text-gray-500">주간·월간 기록과 인스타 스토리 공유</p>
+        </div>
+      </Link>
+
       <div className="card mb-4">
         <p className="text-sm text-gray-500">이름</p>
         <p className="font-semibold">{profile?.full_name}</p>
@@ -97,7 +115,7 @@ export default function MemberProfilePage() {
       <div className="card mb-4">
         <p className="mb-2 font-semibold">내 트레이너</p>
         {trainerName ? (
-          <p className="text-blue-600">{trainerName} 트레이너</p>
+          <p className="text-lime-600">{trainerName} 트레이너</p>
         ) : (
           <>
             <p className="mb-3 text-sm text-gray-500">
@@ -118,7 +136,7 @@ export default function MemberProfilePage() {
           </>
         )}
         {message && (
-          <p className="mt-2 text-sm text-blue-600">{message}</p>
+          <p className="mt-2 text-sm text-lime-600">{message}</p>
         )}
       </div>
 

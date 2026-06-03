@@ -4,6 +4,11 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getAppOrigin, getAuthErrorMessage } from "@/lib/auth-messages";
+import {
+  isSupabaseConfigured,
+  SUPABASE_SETUP_MESSAGE,
+} from "@/lib/supabase/config";
 
 function SignupForm() {
   const router = useRouter();
@@ -16,6 +21,7 @@ function SignupForm() {
   const [inviteCode, setInviteCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const role = roleParam || "member";
 
@@ -23,22 +29,52 @@ function SignupForm() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSuccess("");
+
+    if (!isSupabaseConfigured()) {
+      setError(SUPABASE_SETUP_MESSAGE);
+      setLoading(false);
+      return;
+    }
 
     const supabase = createClient();
     const { data, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: `${getAppOrigin()}/auth/callback`,
         data: {
           role,
           full_name: fullName,
-          invite_code: role === "member" ? inviteCode.toUpperCase() : undefined,
+          invite_code:
+            role === "member" && inviteCode.trim()
+              ? inviteCode.toUpperCase()
+              : undefined,
         },
       },
     });
 
     if (authError) {
-      setError(authError.message);
+      const msg =
+        authError.message === "Failed to fetch"
+          ? "Supabase에 연결할 수 없습니다. .env.local URL/키 확인 후 npm run dev 를 다시 실행하세요."
+          : getAuthErrorMessage(authError.message);
+      setError(msg);
+      setLoading(false);
+      return;
+    }
+
+    if (!data.user) {
+      setError("회원가입에 실패했습니다. 다시 시도해 주세요.");
+      setLoading(false);
+      return;
+    }
+
+    // 이메일 인증이 켜져 있으면 세션이 없음 → 로그인 페이지로 안내
+    if (!data.session) {
+      setSuccess(
+        "가입이 완료되었습니다. 이메일함에서 인증 링크를 눌른 뒤 로그인해 주세요. 메일이 없으면 스팸함도 확인해 주세요."
+      );
       setLoading(false);
       return;
     }
@@ -51,7 +87,7 @@ function SignupForm() {
         .eq("role", "trainer")
         .single();
 
-      if (trainer && data.user) {
+      if (trainer) {
         await supabase.from("trainer_members").insert({
           trainer_id: trainer.id,
           member_id: data.user.id,
@@ -59,7 +95,21 @@ function SignupForm() {
       }
     }
 
-    router.push(role === "trainer" ? "/trainer" : "/member");
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", data.user.id)
+      .single();
+
+    if (!profile) {
+      setError(
+        "계정은 생성됐지만 프로필이 없습니다. Supabase SQL Editor에서 schema.sql과 fix-missing-profiles.sql을 실행해 주세요."
+      );
+      setLoading(false);
+      return;
+    }
+
+    router.push(profile.role === "trainer" ? "/trainer" : "/member");
     router.refresh();
   };
 
@@ -72,6 +122,12 @@ function SignupForm() {
       <h1 className="text-2xl font-bold">
         {role === "trainer" ? "트레이너 회원가입" : "회원 가입"}
       </h1>
+
+      {!isSupabaseConfigured() && (
+        <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {SUPABASE_SETUP_MESSAGE}
+        </p>
+      )}
 
       <form onSubmit={handleSignup} className="mt-8 space-y-4">
         <div>
@@ -130,6 +186,12 @@ function SignupForm() {
           </div>
         )}
 
+        {success && (
+          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            {success}
+          </p>
+        )}
+
         {error && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
             {error}
@@ -145,7 +207,7 @@ function SignupForm() {
         이미 계정이 있으신가요?{" "}
         <Link
           href={`/login?role=${role}`}
-          className="font-medium text-blue-600"
+          className="font-medium text-lime-600"
         >
           로그인
         </Link>
@@ -154,14 +216,14 @@ function SignupForm() {
       <div className="mt-4 flex justify-center gap-4 text-sm">
         <Link
           href="/signup?role=member"
-          className={role === "member" ? "font-semibold text-blue-600" : "text-gray-400"}
+          className={role === "member" ? "font-semibold text-lime-600" : "text-gray-400"}
         >
           회원
         </Link>
         <span className="text-gray-300">|</span>
         <Link
           href="/signup?role=trainer"
-          className={role === "trainer" ? "font-semibold text-blue-600" : "text-gray-400"}
+          className={role === "trainer" ? "font-semibold text-lime-600" : "text-gray-400"}
         >
           트레이너
         </Link>

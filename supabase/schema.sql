@@ -87,7 +87,11 @@ begin
   end if;
 
   insert into public.profiles (id, email, full_name, role, invite_code)
-  values (new.id, new.email, user_name, user_role, trainer_code);
+  values (new.id, new.email, user_name, user_role, trainer_code)
+  on conflict (id) do update set
+    email = excluded.email,
+    full_name = excluded.full_name,
+    role = excluded.role;
 
   -- Link member to trainer if invite code provided
   if user_role = 'member' and (new.raw_user_meta_data->>'invite_code') is not null then

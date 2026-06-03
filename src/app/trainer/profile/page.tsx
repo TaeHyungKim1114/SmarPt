@@ -57,13 +57,13 @@ export default function TrainerProfilePage() {
         <div className="card mb-4">
           <p className="mb-2 font-semibold">회원 초대 코드</p>
           <div className="flex items-center justify-between">
-            <span className="text-xl font-bold tracking-widest text-blue-600">
+            <span className="text-xl font-bold tracking-widest text-lime-600">
               {profile.invite_code}
             </span>
             <button
               type="button"
               onClick={copyCode}
-              className="flex items-center gap-1 text-sm text-blue-600"
+              className="flex items-center gap-1 text-sm text-lime-600"
             >
               <Copy className="h-4 w-4" />
               {copied ? "복사됨" : "복사"}

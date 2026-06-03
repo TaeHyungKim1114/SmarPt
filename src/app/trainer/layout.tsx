@@ -20,7 +20,8 @@ export default async function TrainerLayout({
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "trainer") redirect("/member");
+  if (!profile) redirect("/login?error=no_profile");
+  if (profile.role !== "trainer") redirect("/member");
 
   return (
     <div className="mx-auto min-h-screen max-w-lg pb-20">

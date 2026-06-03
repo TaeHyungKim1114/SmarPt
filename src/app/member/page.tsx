@@ -6,9 +6,15 @@ import { ko } from "date-fns/locale";
 import { Calendar } from "@/components/Calendar";
 import { WorkoutEditor } from "@/components/WorkoutEditor";
 import { DietEditor } from "@/components/DietEditor";
+import { MemberDayWorkoutStats } from "@/components/member/MemberDayWorkoutStats";
+import { TrainerFeedbackCard } from "@/components/member/TrainerFeedbackCard";
+import { MemberRoutinePanel } from "@/components/plans/MemberRoutinePanel";
 import { createClient } from "@/lib/supabase/client";
+import { getTrainerLinkForMember } from "@/lib/trainer-link";
+import { hasDietLogContent } from "@/lib/diet-helpers";
+import { fetchDietPlan } from "@/lib/member-plans";
 import { toDateString } from "@/lib/utils";
-import type { DietLog, Workout, WorkoutExercise } from "@/lib/types";
+import type { DietLog, Profile, Workout, WorkoutExercise } from "@/lib/types";
 
 type Tab = "workout" | "diet";
 
@@ -23,6 +29,8 @@ export default function MemberHomePage() {
   const [exercises, setExercises] = useState<WorkoutExercise[]>([]);
   const [dietLog, setDietLog] = useState<DietLog | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [trainer, setTrainer] = useState<Profile | null>(null);
+  const [planDiet, setPlanDiet] = useState<DietLog | null>(null);
 
   const dateStr = toDateString(selectedDate);
 
@@ -39,13 +47,15 @@ export default function MemberHomePage() {
 
     const { data: diets } = await supabase
       .from("diet_logs")
-      .select("log_date")
+      .select("log_date, meals, notes")
       .eq("member_id", uid)
       .gte("log_date", monthStart)
       .lte("log_date", monthEnd);
 
     setWorkoutDates((workouts || []).map((w) => w.workout_date));
-    setDietDates((diets || []).map((d) => d.log_date));
+    setDietDates(
+      (diets || []).filter((d) => hasDietLogContent(d)).map((d) => d.log_date)
+    );
   }, [selectedDate, supabase]);
 
   const loadDayData = useCallback(async (uid: string) => {
@@ -77,6 +87,21 @@ export default function MemberHomePage() {
       .maybeSingle();
 
     setDietLog(diet);
+
+    const dPlan = await fetchDietPlan(supabase, uid);
+    if (dPlan) {
+      setPlanDiet({
+        id: "",
+        member_id: uid,
+        log_date: dateStr,
+        meals: dPlan.meals,
+        notes: dPlan.notes,
+        created_at: "",
+        updated_at: "",
+      });
+    } else {
+      setPlanDiet(null);
+    }
   }, [dateStr, supabase]);
 
   useEffect(() => {
@@ -88,9 +113,21 @@ export default function MemberHomePage() {
       setUserId(user.id);
       await loadMonthMarkers(user.id);
       await loadDayData(user.id);
+
+      const link = await getTrainerLinkForMember(supabase, user.id);
+      if (link) {
+        const { data: t } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", link.trainerId)
+          .single();
+        setTrainer(t);
+      } else {
+        setTrainer(null);
+      }
     };
     init();
-  }, [selectedDate, refreshKey, loadMonthMarkers, loadDayData, supabase.auth]);
+  }, [selectedDate, refreshKey, loadMonthMarkers, loadDayData, supabase]);
 
   const onSaved = () => {
     setRefreshKey((k) => k + 1);
@@ -116,13 +153,38 @@ export default function MemberHomePage() {
         dietDates={dietDates}
       />
 
+      {userId && trainer && (
+        <div className="mt-4">
+          <TrainerFeedbackCard
+            memberId={userId}
+            reportDate={dateStr}
+            trainerName={trainer.full_name}
+          />
+          <MemberDayWorkoutStats
+            memberId={userId}
+            date={dateStr}
+            refreshKey={refreshKey}
+          />
+        </div>
+      )}
+
+      {userId && !trainer && (
+        <div className="mt-4">
+          <MemberDayWorkoutStats
+            memberId={userId}
+            date={dateStr}
+            refreshKey={refreshKey}
+          />
+        </div>
+      )}
+
       <div className="mt-4 flex rounded-xl bg-gray-100 p-1">
         <button
           type="button"
           onClick={() => setTab("workout")}
           className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition ${
             tab === "workout"
-              ? "bg-white text-blue-600 shadow-sm"
+              ? "bg-white text-lime-600 shadow-sm"
               : "text-gray-500"
           }`}
         >
@@ -141,24 +203,40 @@ export default function MemberHomePage() {
         </button>
       </div>
 
+      {userId && (
+        <MemberRoutinePanel
+          memberId={userId}
+          date={dateStr}
+          activeTab={tab}
+        />
+      )}
+
       <div className="mt-4">
         {tab === "workout" && userId && (
-          <WorkoutEditor
-            workoutId={workout?.id ?? null}
-            memberId={userId}
-            date={dateStr}
-            initialExercises={exercises}
-            initialNotes={workout?.notes || ""}
-            onSaved={onSaved}
-          />
+          <>
+            <p className="mb-2 text-xs font-medium text-gray-400">오늘 운동 기록</p>
+            <WorkoutEditor
+              workoutId={workout?.id ?? null}
+              memberId={userId}
+              date={dateStr}
+              initialExercises={exercises}
+              initialNotes={workout?.notes || ""}
+              onSaved={onSaved}
+            />
+          </>
         )}
         {tab === "diet" && userId && (
-          <DietEditor
-            memberId={userId}
-            date={dateStr}
-            initialLog={dietLog}
-            onSaved={onSaved}
-          />
+          <>
+            <p className="mb-2 text-xs font-medium text-gray-400">오늘 식단 기록</p>
+            <DietEditor
+              key={`diet-${dateStr}-${refreshKey}`}
+              memberId={userId}
+              date={dateStr}
+              initialLog={dietLog}
+              trainerPlan={planDiet}
+              onSaved={onSaved}
+            />
+          </>
         )}
       </div>
     </div>

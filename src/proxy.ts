@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -31,7 +31,8 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isAuthPage = path.startsWith("/login") || path.startsWith("/signup");
-  const isPublic = path === "/" || isAuthPage;
+  const isAuthCallback = path.startsWith("/auth/callback");
+  const isPublic = path === "/" || isAuthPage || isAuthCallback;
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
@@ -47,8 +48,12 @@ export async function middleware(request: NextRequest) {
       .single();
 
     const url = request.nextUrl.clone();
-    url.pathname =
-      profile?.role === "trainer" ? "/trainer" : "/member";
+    if (!profile) {
+      url.pathname = "/login";
+      url.searchParams.set("error", "no_profile");
+      return NextResponse.redirect(url);
+    }
+    url.pathname = profile.role === "trainer" ? "/trainer" : "/member";
     return NextResponse.redirect(url);
   }
 

@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, MessageCircle, User, Users } from "lucide-react";
+import {
+  Calendar,
+  MessageCircle,
+  MessageSquare,
+  TrendingUp,
+  User,
+  Users,
+} from "lucide-react";
 
 type NavItem = {
   href: string;
@@ -19,12 +26,15 @@ export function BottomNav({ role }: BottomNavProps) {
 
   const memberItems: NavItem[] = [
     { href: "/member", label: "기록", icon: Calendar },
+    { href: "/member/report", label: "리포트", icon: TrendingUp },
+    { href: "/member/feedback", label: "피드백", icon: MessageSquare },
     { href: "/member/chat", label: "채팅", icon: MessageCircle },
     { href: "/member/profile", label: "내 정보", icon: User },
   ];
 
   const trainerItems: NavItem[] = [
     { href: "/trainer", label: "회원", icon: Users },
+    { href: "/trainer/chat", label: "채팅", icon: MessageCircle },
     { href: "/trainer/profile", label: "내 정보", icon: User },
   ];
 
@@ -32,7 +42,7 @@ export function BottomNav({ role }: BottomNavProps) {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 backdrop-blur">
-      <div className="mx-auto flex max-w-lg justify-around px-2 py-2">
+      <div className="mx-auto flex max-w-lg justify-around px-1 py-2">
         {items.map(({ href, label, icon: Icon }) => {
           const active =
             pathname === href ||
@@ -41,11 +51,11 @@ export function BottomNav({ role }: BottomNavProps) {
             <Link
               key={href}
               href={href}
-              className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2 text-xs font-medium transition ${
-                active ? "text-blue-600" : "text-gray-400"
+              className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2 text-xs font-medium whitespace-nowrap transition ${
+                active ? "text-lime-600" : "text-gray-400"
               }`}
             >
-              <Icon className={`h-5 w-5 ${active ? "text-blue-600" : ""}`} />
+              <Icon className={`h-5 w-5 ${active ? "text-lime-600" : ""}`} />
               {label}
             </Link>
           );

@@ -7,7 +7,7 @@ import { Chat } from "@/components/Chat";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/types";
 
-export default function TrainerChatPage({
+export default function TrainerChatRoomPage({
   params,
 }: {
   params: Promise<{ memberId: string }>;
@@ -35,25 +35,27 @@ export default function TrainerChatPage({
   }, [memberId, supabase]);
 
   if (!trainerId) {
-    return <div className="p-8 text-center text-gray-400">로딩 중...</div>;
+    return (
+      <div className="flex h-64 items-center justify-center text-gray-400">
+        로딩 중...
+      </div>
+    );
   }
 
   return (
     <div>
       <header className="flex items-center gap-3 border-b border-gray-100 bg-white px-4 py-4">
-        <Link href={`/trainer/member/${memberId}`}>
+        <Link href="/trainer/chat" className="rounded-lg p-1 hover:bg-gray-100">
           <ArrowLeft className="h-5 w-5 text-gray-500" />
         </Link>
-        <div>
-          <h1 className="font-bold">{member?.full_name}</h1>
-          <p className="text-xs text-gray-400">채팅</p>
-        </div>
+        <h1 className="min-w-0 truncate font-bold">
+          {member?.full_name ?? "회원"}
+        </h1>
       </header>
       <Chat
         trainerId={trainerId}
         memberId={memberId}
         currentUserId={trainerId}
-        otherUser={member}
       />
     </div>
   );
