@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f6f9;
+  --foreground: #111827;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --surface: #ffffff;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --workout-dot: #2563eb;
+  --diet-dot: #10b981;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-surface: var(--surface);
+  --font-sans: var(--font-geist-sans);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+.btn-primary {
+  @apply rounded-xl bg-[var(--primary)] px-4 py-3 font-semibold text-white transition hover:bg-[var(--primary-dark)] disabled:opacity-50;
+}
+
+.btn-secondary {
+  @apply rounded-xl border border-[var(--border)] bg-white px-4 py-3 font-medium text-gray-700 transition hover:bg-gray-50;
+}
+
+.input-field {
+  @apply w-full rounded-xl border border-[var(--border)] bg-white px-4 py-3 outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-blue-100;
+}
+
+.card {
+  @apply rounded-2xl bg-white p-4 shadow-sm;
+}
