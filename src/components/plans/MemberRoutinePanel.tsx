@@ -2,6 +2,7 @@
 
 import { ClipboardList } from "lucide-react";
 import { useWorkoutSession } from "@/hooks/useWorkoutSession";
+import type { PlanExercise } from "@/lib/member-plans";
 import { WorkoutPlanEditor } from "./WorkoutPlanEditor";
 import { DietPlanEditor } from "./DietPlanEditor";
 
@@ -9,12 +10,16 @@ type MemberRoutinePanelProps = {
   memberId: string;
   date: string;
   activeTab: "workout" | "diet";
+  hasTodayWorkout?: boolean;
+  onStartWorkout?: (exercises: PlanExercise[], notes: string) => void;
 };
 
 export function MemberRoutinePanel({
   memberId,
   date,
   activeTab,
+  hasTodayWorkout = false,
+  onStartWorkout,
 }: MemberRoutinePanelProps) {
   const { session } = useWorkoutSession(memberId, date);
   const planLocked = session.started;
@@ -30,7 +35,13 @@ export function MemberRoutinePanel({
 
       <div className="mt-1">
         {activeTab === "workout" ? (
-          <WorkoutPlanEditor memberId={memberId} locked={planLocked} />
+          <WorkoutPlanEditor
+            memberId={memberId}
+            variant="member"
+            locked={planLocked}
+            hasTodayWorkout={hasTodayWorkout}
+            onStartWorkout={onStartWorkout}
+          />
         ) : (
           <DietPlanEditor memberId={memberId} variant="member" />
         )}

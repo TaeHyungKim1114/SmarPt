@@ -38,21 +38,15 @@ export function StatCards({
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       {items.map(({ label, value, sub, icon: Icon, color }) => (
-        <div key={label} className="card flex items-start gap-3">
+        <div key={label} className="card">
           <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${color}`}
+            className={`mb-2 flex h-9 w-9 items-center justify-center rounded-xl ${color}`}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-4 w-4" />
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium whitespace-nowrap text-gray-500">
-              {label}
-            </p>
-            <p className="text-2xl font-bold tracking-tight whitespace-nowrap">
-              {value}
-            </p>
-            <p className="text-[11px] leading-snug text-gray-400">{sub}</p>
-          </div>
+          <p className="text-xs font-medium leading-snug text-gray-500">{label}</p>
+          <p className="mt-1 text-2xl font-bold tracking-tight">{value}</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-gray-400">{sub}</p>
         </div>
       ))}
     </div>

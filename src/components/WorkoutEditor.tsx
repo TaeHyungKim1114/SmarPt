@@ -26,6 +26,8 @@ type WorkoutEditorProps = {
   date: string;
   initialExercises?: WorkoutExercise[];
   initialNotes?: string;
+  planStart?: { exercises: WorkoutExercise[]; notes: string } | null;
+  onPlanStartConsumed?: () => void;
   onSaved: () => void;
   readOnly?: boolean;
 };
@@ -49,6 +51,8 @@ export function WorkoutEditor({
   date,
   initialExercises = [],
   initialNotes = "",
+  planStart = null,
+  onPlanStartConsumed,
   onSaved,
   readOnly = false,
 }: WorkoutEditorProps) {
@@ -71,7 +75,6 @@ export function WorkoutEditor({
   const [pendingAdd, setPendingAdd] = useState<string | undefined>(undefined);
   const lastExerciseRef = useRef<HTMLDivElement>(null);
   const prevExerciseCountRef = useRef(exercises.length);
-  const syncedWorkoutIdRef = useRef<string | null | undefined>(undefined);
   const userEditingRef = useRef(false);
 
   const [workoutEnded, setWorkoutEnded] = useState(() => {
@@ -114,33 +117,49 @@ export function WorkoutEditor({
     if (stored.started) {
       setWorkoutEnded(false);
       userEditingRef.current = true;
+    } else {
+      userEditingRef.current = false;
     }
   }, [memberId, date, readOnly]);
 
   useEffect(() => {
-    if (readOnly) return;
-    if (
-      syncedWorkoutIdRef.current === workoutId &&
-      syncedWorkoutIdRef.current !== undefined
-    ) {
-      return;
-    }
-    syncedWorkoutIdRef.current = workoutId;
+    if (readOnly || !planStart) return;
 
-    if (initialExercises.length > 0) {
-      setExercises(
-        initialExercises.map((e) => ({
-          id: e.id,
-          name: e.name,
-          sets: normalizeSets(e.sets),
-          memo: e.memo || "",
-        }))
-      );
-    }
-    setNotes(initialNotes);
+    userEditingRef.current = true;
+    setWorkoutEnded(false);
+    setSavedSummary(null);
+    setExercises(
+      planStart.exercises.map((e) => ({
+        id: e.id,
+        name: e.name,
+        sets: normalizeSets(e.sets),
+        memo: e.memo || "",
+      }))
+    );
+    setNotes(planStart.notes);
+    startWorkout();
+    onPlanStartConsumed?.();
+  }, [planStart, readOnly, startWorkout, onPlanStartConsumed]);
+
+  useEffect(() => {
+    if (readOnly) return;
 
     const stored = loadWorkoutSession(memberId, date);
-    if (!userEditingRef.current && !stored.started && workoutId) {
+    if (stored.started || userEditingRef.current) return;
+
+    setExercises(
+      initialExercises.length > 0
+        ? initialExercises.map((e) => ({
+            id: e.id,
+            name: e.name,
+            sets: normalizeSets(e.sets),
+            memo: e.memo || "",
+          }))
+        : []
+    );
+    setNotes(initialNotes);
+
+    if (workoutId) {
       setWorkoutEnded(true);
       setSavedSummary({
         workoutSec: parseWorkoutDurationSec(initialNotes),
@@ -148,6 +167,9 @@ export function WorkoutEditor({
           initialExercises.map((e) => ({ sets: normalizeSets(e.sets) }))
         ),
       });
+    } else {
+      setWorkoutEnded(false);
+      setSavedSummary(null);
     }
   }, [workoutId, initialExercises, initialNotes, memberId, date, readOnly]);
 
@@ -241,6 +263,18 @@ export function WorkoutEditor({
       next[exIdx] = {
         ...next[exIdx],
         sets: [...next[exIdx].sets, emptySet()],
+      };
+      return next;
+    });
+  };
+
+  const removeSet = (exIdx: number, setIdx: number) => {
+    setExercises((prev) => {
+      const next = [...prev];
+      const sets = next[exIdx].sets.filter((_, i) => i !== setIdx);
+      next[exIdx] = {
+        ...next[exIdx],
+        sets: sets.length ? sets : [emptySet()],
       };
       return next;
     });
@@ -350,6 +384,8 @@ export function WorkoutEditor({
 
   const isEmpty = exercises.length === 0;
   const editing = !readOnly && !workoutEnded;
+  const viewingSaved = !readOnly && workoutEnded && Boolean(workoutId);
+  const showEmptyAdd = isEmpty && !readOnly && !viewingSaved;
 
   return (
     <div className={`space-y-4 ${showTimers ? "pb-44" : ""}`}>
@@ -373,7 +409,7 @@ export function WorkoutEditor({
         <div className="card py-8 text-center text-sm text-gray-400">
           운동 기록이 없습니다
         </div>
-      ) : isEmpty && !readOnly ? (
+      ) : showEmptyAdd ? (
         <button
           type="button"
           onClick={() => requestAddExercise()}
@@ -396,7 +432,7 @@ export function WorkoutEditor({
         >
           <div className="mb-3 flex items-center gap-2">
             <GripVertical className="h-4 w-4 text-gray-300" />
-            {readOnly ? (
+            {readOnly || workoutEnded ? (
               <h3 className="font-semibold">{ex.name}</h3>
             ) : (
               <input
@@ -421,21 +457,30 @@ export function WorkoutEditor({
             )}
           </div>
 
-          <div className="mb-2 grid grid-cols-[2.25rem_1.75rem_1fr_1fr] gap-2 text-xs font-medium text-gray-400">
+          <div
+            className={`mb-2 grid gap-2 text-xs font-medium text-gray-400 ${
+              editing
+                ? "grid-cols-[2.25rem_1.75rem_1fr_1fr_2rem]"
+                : "grid-cols-[2.25rem_1.75rem_1fr_1fr]"
+            }`}
+          >
             <span className="text-center">완료</span>
             <span className="text-center">세트</span>
             <span className="block w-full text-center">kg</span>
             <span className="block w-full text-center">회</span>
+            {editing && <span />}
           </div>
 
           {ex.sets.map((set, setIdx) => (
             <div
               key={setIdx}
-              className={`mb-2 grid grid-cols-[2.25rem_1.75rem_1fr_1fr] items-center gap-2 rounded-xl transition ${
-                set.completed ? "bg-lime-50/80 ring-1 ring-lime-100" : ""
-              }`}
+              className={`mb-2 grid items-center gap-2 rounded-xl transition ${
+                editing
+                  ? "grid-cols-[2.25rem_1.75rem_1fr_1fr_2rem]"
+                  : "grid-cols-[2.25rem_1.75rem_1fr_1fr]"
+              } ${set.completed ? "bg-lime-50/80 ring-1 ring-lime-100" : ""}`}
             >
-              {readOnly ? (
+              {readOnly || workoutEnded ? (
                 <span className="flex justify-center">
                   {set.completed ? (
                     <Check className="h-5 w-5 text-lime-600" />
@@ -460,7 +505,7 @@ export function WorkoutEditor({
               <span className="text-center text-sm font-medium text-gray-500">
                 {setIdx + 1}
               </span>
-              {readOnly ? (
+              {readOnly || workoutEnded ? (
                 <>
                   <span className="block w-full text-center tabular-nums">
                     {set.weight ?? "-"}
@@ -491,6 +536,16 @@ export function WorkoutEditor({
                       updateSet(exIdx, setIdx, "reps", e.target.value)
                     }
                   />
+                  {editing && ex.sets.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeSet(exIdx, setIdx)}
+                      className="rounded-lg p-1.5 text-red-400 hover:bg-red-50"
+                      aria-label={`${setIdx + 1}세트 삭제`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -521,7 +576,7 @@ export function WorkoutEditor({
         </>
       )}
 
-      {!isEmpty && (
+      {(!isEmpty || viewingSaved) && (
       <div className="card">
         <label className="mb-2 block text-sm font-medium text-gray-600">
           메모
@@ -556,7 +611,7 @@ export function WorkoutEditor({
         </button>
       )}
 
-      {!readOnly && !isEmpty && workoutEnded && (
+      {!readOnly && (viewingSaved || (!isEmpty && workoutEnded)) && (
         <button
           type="button"
           onClick={resumeEditing}

@@ -1,29 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactElement } from "react";
-import { ResponsiveContainer } from "recharts";
+import {
+  cloneElement,
+  isValidElement,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 
 type ChartBoxProps = {
   height: number;
   children: ReactElement;
 };
 
-/** ResponsiveContainer는 부모 크기가 0일 때 경고가 납니다. 크기 확인 후 마운트합니다. */
+/** 부모 너비를 측정한 뒤 차트에 고정 px 크기를 넘깁니다 (ResponsiveContainer -1 경고 방지). */
 export function ChartBox({ height, children }: ChartBoxProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const [ready, setReady] = useState(false);
+  const [width, setWidth] = useState(0);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
-    const check = () => {
-      const { width, height: h } = el.getBoundingClientRect();
-      setReady(width > 0 && h > 0);
+    const update = () => {
+      const next = Math.floor(el.getBoundingClientRect().width);
+      setWidth((prev) => (prev === next ? prev : next));
     };
 
-    check();
-    const ro = new ResizeObserver(check);
+    update();
+
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(update);
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, [height]);
@@ -31,14 +40,12 @@ export function ChartBox({ height, children }: ChartBoxProps) {
   return (
     <div
       ref={ref}
-      className="w-full min-w-0"
+      className="w-full min-w-0 overflow-hidden"
       style={{ height, minHeight: height }}
     >
-      {ready ? (
-        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-          {children}
-        </ResponsiveContainer>
-      ) : null}
+      {width > 0 && isValidElement(children)
+        ? cloneElement(children, { width, height })
+        : null}
     </div>
   );
 }

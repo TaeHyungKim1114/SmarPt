@@ -12,7 +12,7 @@ import { MemberRoutinePanel } from "@/components/plans/MemberRoutinePanel";
 import { createClient } from "@/lib/supabase/client";
 import { getTrainerLinkForMember } from "@/lib/trainer-link";
 import { hasDietLogContent } from "@/lib/diet-helpers";
-import { fetchDietPlan } from "@/lib/member-plans";
+import { fetchDietPlan, planExercisesToInitial, type PlanExercise } from "@/lib/member-plans";
 import { toDateString } from "@/lib/utils";
 import type { DietLog, Profile, Workout, WorkoutExercise } from "@/lib/types";
 
@@ -31,6 +31,10 @@ export default function MemberHomePage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [trainer, setTrainer] = useState<Profile | null>(null);
   const [planDiet, setPlanDiet] = useState<DietLog | null>(null);
+  const [planStart, setPlanStart] = useState<{
+    exercises: WorkoutExercise[];
+    notes: string;
+  } | null>(null);
 
   const dateStr = toDateString(selectedDate);
 
@@ -142,6 +146,23 @@ export default function MemberHomePage() {
     }
   };
 
+  const handleStartWorkoutFromPlan = (
+    planExercises: PlanExercise[],
+    planNotes: string
+  ) => {
+    setPlanStart({
+      exercises: planExercisesToInitial(planExercises),
+      notes: planNotes ?? "",
+    });
+    window.setTimeout(() => {
+      document
+        .getElementById("today-workout")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  };
+
+  const hasTodayWorkout = Boolean(workout) || exercises.length > 0;
+
   return (
     <div className="px-4 pt-6">
       <header className="mb-4">
@@ -213,10 +234,12 @@ export default function MemberHomePage() {
           memberId={userId}
           date={dateStr}
           activeTab={tab}
+          hasTodayWorkout={hasTodayWorkout}
+          onStartWorkout={handleStartWorkoutFromPlan}
         />
       )}
 
-      <div className="mt-4">
+      <div id="today-workout" className="mt-4 scroll-mt-4">
         {tab === "workout" && userId && (
           <>
             <p className="mb-2 text-xs font-medium text-gray-400">오늘 운동 기록</p>
@@ -226,6 +249,8 @@ export default function MemberHomePage() {
               date={dateStr}
               initialExercises={exercises}
               initialNotes={workout?.notes || ""}
+              planStart={planStart}
+              onPlanStartConsumed={() => setPlanStart(null)}
               onSaved={onSaved}
             />
           </>

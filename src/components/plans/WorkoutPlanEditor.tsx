@@ -20,6 +20,9 @@ type WorkoutPlanEditorProps = {
   trainerId?: string | null;
   locked?: boolean;
   showActiveBanner?: boolean;
+  variant?: "trainer" | "member";
+  hasTodayWorkout?: boolean;
+  onStartWorkout?: (exercises: PlanExercise[], notes: string) => void;
   onSaved?: () => void;
 };
 
@@ -28,6 +31,9 @@ export function WorkoutPlanEditor({
   trainerId,
   locked = false,
   showActiveBanner = false,
+  variant = "trainer",
+  hasTodayWorkout = false,
+  onStartWorkout,
   onSaved,
 }: WorkoutPlanEditorProps) {
   const supabase = createClient();
@@ -37,6 +43,7 @@ export function WorkoutPlanEditor({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const isMemberView = variant === "member";
 
   const load = async () => {
     setLoading(true);
@@ -61,11 +68,19 @@ export function WorkoutPlanEditor({
   }, [memberId]);
 
   const addExercise = (name = "") => {
-    if (locked) return;
+    if (locked || isMemberView) return;
     setExercises((prev) => [
       ...prev,
-      { name, sets: [emptySet(), emptySet(), emptySet()], memo: "" },
+      { name, sets: [emptySet()], memo: "" },
     ]);
+  };
+
+  const removeSet = (exIdx: number, setIdx: number) => {
+    if (locked || isMemberView) return;
+    const next = [...exercises];
+    const sets = next[exIdx].sets.filter((_, i) => i !== setIdx);
+    next[exIdx] = { ...next[exIdx], sets: sets.length ? sets : [emptySet()] };
+    setExercises(next);
   };
 
   const save = async () => {
@@ -100,7 +115,7 @@ export function WorkoutPlanEditor({
 
   return (
     <div className="space-y-4">
-      {loadError && (
+      {loadError && !isMemberView && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
           {loadError}
           <span className="mt-1 block text-xs text-red-500/90">
@@ -112,97 +127,144 @@ export function WorkoutPlanEditor({
 
       {showActiveBanner && locked && <MemberWorkingOutBanner />}
 
-      {locked && !showActiveBanner && (
+      {locked && !showActiveBanner && !isMemberView && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
           회원이 오늘 운동 중이라 운동 가이드 수정이 잠시 잠겨 있습니다. 운동
           종료 후 다시 시도해 주세요.
         </p>
       )}
 
+      {isMemberView && locked && (
+        <p className="rounded-lg bg-lime-50 px-3 py-2 text-sm text-lime-800">
+          운동이 진행 중입니다. 아래 「오늘 운동 기록」에서 이어서 진행하세요.
+        </p>
+      )}
+
       <p className="text-sm text-gray-500">
-        트레이너가 정한 기본 운동 루틴입니다. 오늘 기록이 없을 때 이 루틴이
-        불러와집니다.
+        {isMemberView
+          ? "트레이너님이 설정한 운동 루틴입니다. 운동 시작하기를 누르면 타이머와 함께 기록이 시작됩니다."
+          : "트레이너가 정한 기본 운동 루틴입니다. 오늘 기록이 없을 때 이 루틴이 불러와집니다."}
       </p>
+
+      {isMemberView && exercises.length === 0 && !loadError && (
+        <div className="card py-8 text-center text-sm text-gray-400">
+          아직 설정된 운동 루틴이 없습니다
+        </div>
+      )}
 
       {exercises.map((ex, exIdx) => (
         <div key={exIdx} className="card">
           <div className="mb-3 flex items-center gap-2">
-            <input
-              className="input-field flex-1 py-2"
-              placeholder="운동 이름"
-              value={ex.name}
-              disabled={locked}
-              onChange={(e) => {
-                const next = [...exercises];
-                next[exIdx] = { ...next[exIdx], name: e.target.value };
-                setExercises(next);
-              }}
-            />
-            {!locked && (
-              <button
-                type="button"
-                onClick={() =>
-                  setExercises(exercises.filter((_, i) => i !== exIdx))
-                }
-                className="rounded-lg p-2 text-red-400 hover:bg-red-50"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+            {isMemberView ? (
+              <h3 className="font-semibold">{ex.name}</h3>
+            ) : (
+              <>
+                <input
+                  className="input-field flex-1 py-2"
+                  placeholder="운동 이름"
+                  value={ex.name}
+                  disabled={locked}
+                  onChange={(e) => {
+                    const next = [...exercises];
+                    next[exIdx] = { ...next[exIdx], name: e.target.value };
+                    setExercises(next);
+                  }}
+                />
+                {!locked && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExercises(exercises.filter((_, i) => i !== exIdx))
+                    }
+                    className="rounded-lg p-2 text-red-400 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </>
             )}
           </div>
 
-          <div className="mb-2 grid grid-cols-[1.75rem_1fr_1fr] gap-2 text-xs font-medium text-gray-400">
+          <div className="mb-2 grid grid-cols-[1.75rem_1fr_1fr_2rem] gap-2 text-xs font-medium text-gray-400">
             <span className="text-center">세트</span>
             <span className="text-center">kg</span>
             <span className="text-center">회</span>
+            {!isMemberView && <span />}
           </div>
 
           {ex.sets.map((set, setIdx) => (
             <div
               key={setIdx}
-              className="mb-2 grid grid-cols-[1.75rem_1fr_1fr] items-center gap-2"
+              className={`mb-2 grid items-center gap-2 ${
+                isMemberView
+                  ? "grid-cols-[1.75rem_1fr_1fr]"
+                  : "grid-cols-[1.75rem_1fr_1fr_2rem]"
+              }`}
             >
               <span className="text-center text-sm text-gray-500">
                 {setIdx + 1}
               </span>
-              <input
-                type="number"
-                className="input-field py-2 text-center"
-                disabled={locked}
-                value={set.weight ?? ""}
-                onChange={(e) => {
-                  const next = [...exercises];
-                  const sets = [...next[exIdx].sets];
-                  sets[setIdx] = {
-                    ...sets[setIdx],
-                    weight:
-                      e.target.value === "" ? null : Number(e.target.value),
-                  };
-                  next[exIdx] = { ...next[exIdx], sets };
-                  setExercises(next);
-                }}
-              />
-              <input
-                type="number"
-                className="input-field py-2 text-center"
-                disabled={locked}
-                value={set.reps ?? ""}
-                onChange={(e) => {
-                  const next = [...exercises];
-                  const sets = [...next[exIdx].sets];
-                  sets[setIdx] = {
-                    ...sets[setIdx],
-                    reps:
-                      e.target.value === "" ? null : Number(e.target.value),
-                  };
-                  next[exIdx] = { ...next[exIdx], sets };
-                  setExercises(next);
-                }}
-              />
+              {isMemberView ? (
+                <>
+                  <span className="text-center tabular-nums text-sm">
+                    {set.weight ?? "—"}
+                  </span>
+                  <span className="text-center tabular-nums text-sm">
+                    {set.reps ?? "—"}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <input
+                    type="number"
+                    className="input-field py-2 text-center"
+                    disabled={locked}
+                    value={set.weight ?? ""}
+                    onChange={(e) => {
+                      const next = [...exercises];
+                      const sets = [...next[exIdx].sets];
+                      sets[setIdx] = {
+                        ...sets[setIdx],
+                        weight:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      };
+                      next[exIdx] = { ...next[exIdx], sets };
+                      setExercises(next);
+                    }}
+                  />
+                  <input
+                    type="number"
+                    className="input-field py-2 text-center"
+                    disabled={locked}
+                    value={set.reps ?? ""}
+                    onChange={(e) => {
+                      const next = [...exercises];
+                      const sets = [...next[exIdx].sets];
+                      sets[setIdx] = {
+                        ...sets[setIdx],
+                        reps:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      };
+                      next[exIdx] = { ...next[exIdx], sets };
+                      setExercises(next);
+                    }}
+                  />
+                  {!locked && ex.sets.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeSet(exIdx, setIdx)}
+                      className="rounded-lg p-1.5 text-red-400 hover:bg-red-50"
+                      aria-label={`${setIdx + 1}세트 삭제`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           ))}
 
-          {!locked && (
+          {!locked && !isMemberView && (
             <button
               type="button"
               onClick={() => {
@@ -221,7 +283,7 @@ export function WorkoutPlanEditor({
         </div>
       ))}
 
-      {!locked && (
+      {!locked && !isMemberView && (
         <button
           type="button"
           onClick={() => addExercise()}
@@ -232,20 +294,43 @@ export function WorkoutPlanEditor({
         </button>
       )}
 
-      <div className="card">
-        <label className="mb-2 block text-sm font-medium text-gray-600">
-          루틴 메모
-        </label>
-        <textarea
-          className="input-field min-h-[72px] resize-none"
-          placeholder="운동 시 참고 사항"
-          value={notes}
-          disabled={locked}
-          onChange={(e) => setNotes(e.target.value)}
-        />
-      </div>
+      {(notes || !isMemberView) && (
+        <div className="card">
+          <label className="mb-2 block text-sm font-medium text-gray-600">
+            루틴 메모
+          </label>
+          {isMemberView ? (
+            <p className="whitespace-pre-wrap text-sm text-gray-400">
+              {notes || "—"}
+            </p>
+          ) : (
+            <textarea
+              className="input-field min-h-[72px] resize-none"
+              placeholder="운동 시 참고 사항"
+              value={notes}
+              disabled={locked}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          )}
+        </div>
+      )}
 
-      {!locked && !loadError && (
+      {isMemberView &&
+        !locked &&
+        !loadError &&
+        exercises.length > 0 &&
+        !hasTodayWorkout &&
+        onStartWorkout && (
+          <button
+            type="button"
+            onClick={() => onStartWorkout(exercises, notes)}
+            className="btn-primary w-full"
+          >
+            운동 시작하기
+          </button>
+        )}
+
+      {!locked && !isMemberView && !loadError && (
         <>
           {message && (
             <p
