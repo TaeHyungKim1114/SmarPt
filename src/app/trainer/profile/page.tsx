@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { ProfileNameEditor } from "@/components/ProfileNameEditor";
 import type { Profile } from "@/lib/types";
 
 export default function TrainerProfilePage() {
@@ -47,8 +48,12 @@ export default function TrainerProfilePage() {
       <h1 className="mb-6 text-xl font-bold">내 정보</h1>
 
       <div className="card mb-4">
-        <p className="text-sm text-gray-500">이름</p>
-        <p className="font-semibold">{profile?.full_name}</p>
+        <ProfileNameEditor
+          profile={profile}
+          onUpdated={(fullName) =>
+            setProfile((prev) => (prev ? { ...prev, full_name: fullName } : prev))
+          }
+        />
         <p className="mt-3 text-sm text-gray-500">이메일</p>
         <p className="text-sm">{profile?.email}</p>
       </div>
