@@ -1,6 +1,28 @@
--- 트레이너 → 회원 운동·식단 루틴 + 운동 중 상태 (트레이너 루틴 수정 잠금)
--- Supabase SQL Editor에서 실행 (fix-rls-recursion.sql 의 is_trainer_of_member 필요)
+-- 트레이너가 회원 운동·식단 가이드(member_*_plans)를 저장할 수 있도록 RLS·권한 수정
+-- Supabase SQL Editor에서 실행 (migration-member-plans.sql 실행 후에도 재실행 가능)
 
+create or replace function public.is_trainer_of_member(p_member_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.trainer_members tm
+    where tm.trainer_id = auth.uid() and tm.member_id = p_member_id
+  )
+  or exists (
+    select 1 from public.pt_connections pc
+    where pc.trainer_id = auth.uid()
+      and pc.member_id = p_member_id
+      and pc.status = 'active'
+  );
+$$;
+
+grant execute on function public.is_trainer_of_member(uuid) to authenticated;
+
+-- 테이블 없으면 생성 (migration-member-plans.sql 과 동일)
 create table if not exists public.member_workout_plans (
   member_id uuid primary key references public.profiles(id) on delete cascade,
   trainer_id uuid references public.profiles(id) on delete set null,
@@ -26,16 +48,6 @@ create table if not exists public.member_active_workout (
   updated_at timestamptz not null default now()
 );
 
-drop trigger if exists member_workout_plans_set_updated_at on public.member_workout_plans;
-create trigger member_workout_plans_set_updated_at
-  before update on public.member_workout_plans
-  for each row execute function public.set_updated_at();
-
-drop trigger if exists member_diet_plans_set_updated_at on public.member_diet_plans;
-create trigger member_diet_plans_set_updated_at
-  before update on public.member_diet_plans
-  for each row execute function public.set_updated_at();
-
 alter table public.member_workout_plans enable row level security;
 alter table public.member_diet_plans enable row level security;
 alter table public.member_active_workout enable row level security;
@@ -44,7 +56,7 @@ grant select, insert, update, delete on public.member_workout_plans to authentic
 grant select, insert, update, delete on public.member_diet_plans to authenticated;
 grant select, insert, update, delete on public.member_active_workout to authenticated;
 
--- workout plans (회원 읽기 전용, 트레이너 저장)
+-- 회원: 가이드는 읽기만 (일일 기록은 diet_logs / workouts)
 drop policy if exists "Members manage own workout plan" on public.member_workout_plans;
 drop policy if exists "Members read own workout plan" on public.member_workout_plans;
 create policy "Members read own workout plan"
@@ -57,7 +69,6 @@ create policy "Trainers manage member workout plan"
   using (public.is_trainer_of_member(member_id))
   with check (public.is_trainer_of_member(member_id));
 
--- diet plans
 drop policy if exists "Members manage own diet plan" on public.member_diet_plans;
 drop policy if exists "Members read own diet plan" on public.member_diet_plans;
 create policy "Members read own diet plan"
@@ -70,11 +81,11 @@ create policy "Trainers manage member diet plan"
   using (public.is_trainer_of_member(member_id))
   with check (public.is_trainer_of_member(member_id));
 
--- active workout (member writes, trainer reads)
 drop policy if exists "Members manage own active workout" on public.member_active_workout;
 create policy "Members manage own active workout"
   on public.member_active_workout for all
-  using (member_id = auth.uid());
+  using (member_id = auth.uid())
+  with check (member_id = auth.uid());
 
 drop policy if exists "Trainers read member active workout" on public.member_active_workout;
 create policy "Trainers read member active workout"

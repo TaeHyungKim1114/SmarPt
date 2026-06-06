@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Dumbbell, Users } from "lucide-react";
 
@@ -5,10 +6,14 @@ export default function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-12">
       <div className="mb-10 text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-lime-600 text-white">
-          <Dumbbell className="h-8 w-8" />
-        </div>
-        <h1 className="text-3xl font-bold tracking-tight">SmarPt</h1>
+        <Image
+          src="/logo.png"
+          alt="SmarPt"
+          width={200}
+          height={200}
+          priority
+          className="mx-auto mb-2 h-44 w-44 object-contain"
+        />
         <p className="mt-2 text-gray-500">
           트레이너와 회원을 연결하는
           <br />

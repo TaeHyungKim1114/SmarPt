@@ -88,7 +88,12 @@ export default function MemberHomePage() {
 
     setDietLog(diet);
 
-    const dPlan = await fetchDietPlan(supabase, uid);
+    let dPlan = null;
+    try {
+      dPlan = await fetchDietPlan(supabase, uid);
+    } catch (e) {
+      console.warn("diet plan load", e);
+    }
     if (dPlan) {
       setPlanDiet({
         id: "",

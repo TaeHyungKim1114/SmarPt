@@ -24,6 +24,49 @@ export type DietPlan = {
   updated_at: string;
 };
 
+const PLANS_SETUP_HINT =
+  "Supabase SQL Editor에서 supabase/fix-member-plans-rls.sql 파일을 실행해 주세요.";
+
+/** member_*_plans 테이블이 아직 생성되지 않았을 때 */
+export function isMissingMemberPlansTableError(error: {
+  message?: string;
+  code?: string;
+}): boolean {
+  if (error.code === "42P01") return true;
+  const msg = error.message ?? "";
+  return (
+    /could not find the table/i.test(msg) ||
+    /relation .* does not exist/i.test(msg) ||
+    /schema cache/i.test(msg)
+  );
+}
+
+function warnMissingPlansTable(tableName: string) {
+  console.warn(
+    `[SmarPt] public.${tableName} 테이블이 없습니다. ${PLANS_SETUP_HINT}`
+  );
+}
+
+function handlePlansFetchError(
+  error: { message?: string; code?: string },
+  tableName: string
+): null {
+  if (isMissingMemberPlansTableError(error)) {
+    warnMissingPlansTable(tableName);
+    return null;
+  }
+  throw new Error(error.message ?? "가이드를 불러오지 못했습니다.");
+}
+
+function handlePlansSaveError(error: { message?: string; code?: string }): never {
+  if (isMissingMemberPlansTableError(error)) {
+    throw new Error(
+      `운동·식단 가이드 테이블이 없습니다. ${PLANS_SETUP_HINT}`
+    );
+  }
+  throw error;
+}
+
 function parsePlanExercises(raw: unknown): PlanExercise[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -68,7 +111,10 @@ export async function fetchWorkoutPlan(
     .eq("member_id", memberId)
     .maybeSingle();
 
-  if (error || !data) return null;
+  if (error) {
+    return handlePlansFetchError(error, "member_workout_plans");
+  }
+  if (!data) return null;
 
   return {
     member_id: data.member_id,
@@ -101,7 +147,7 @@ export async function saveWorkoutPlan(
     .from("member_workout_plans")
     .upsert(payload, { onConflict: "member_id" });
 
-  if (error) throw error;
+  if (error) handlePlansSaveError(error);
 }
 
 export async function fetchDietPlan(
@@ -114,7 +160,10 @@ export async function fetchDietPlan(
     .eq("member_id", memberId)
     .maybeSingle();
 
-  if (error || !data) return null;
+  if (error) {
+    return handlePlansFetchError(error, "member_diet_plans");
+  }
+  if (!data) return null;
 
   return {
     member_id: data.member_id,
@@ -147,7 +196,7 @@ export async function saveDietPlan(
     .from("member_diet_plans")
     .upsert(payload, { onConflict: "member_id" });
 
-  if (error) throw error;
+  if (error) handlePlansSaveError(error);
 }
 
 export function defaultPlanExercises(): PlanExercise[] {

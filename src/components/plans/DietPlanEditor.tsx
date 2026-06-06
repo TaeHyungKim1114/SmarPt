@@ -31,14 +31,25 @@ export function DietPlanEditor({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const isMemberView = variant === "member";
 
   const load = async () => {
     setLoading(true);
-    const plan = await fetchDietPlan(supabase, memberId);
-    setMeals(plan?.meals ?? defaultMeals());
-    setNotes(plan?.notes ?? "");
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const plan = await fetchDietPlan(supabase, memberId);
+      setMeals(plan?.meals ?? defaultMeals());
+      setNotes(plan?.notes ?? "");
+    } catch (e) {
+      setLoadError(
+        e instanceof Error ? e.message : "식단 가이드를 불러오지 못했습니다."
+      );
+      setMeals(defaultMeals());
+      setNotes("");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -72,9 +83,8 @@ export function DietPlanEditor({
       setMessage(isMemberView ? "저장되었습니다." : "식단 가이드가 저장되었습니다.");
       onSaved?.();
     } catch (e) {
-      setMessage(
-        e instanceof Error ? e.message : "저장에 실패했습니다."
-      );
+      const msg = e instanceof Error ? e.message : "저장에 실패했습니다.";
+      setMessage(msg.includes("저장") ? msg : `저장 실패: ${msg}`);
     } finally {
       setSaving(false);
     }
@@ -94,6 +104,16 @@ export function DietPlanEditor({
 
   return (
     <div className="space-y-4">
+      {loadError && !isMemberView && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+          {loadError}
+          <span className="mt-1 block text-xs text-red-500/90">
+            Supabase SQL Editor에서 supabase/fix-member-plans-rls.sql 을
+            실행해 주세요.
+          </span>
+        </p>
+      )}
+
       {showActiveBanner && locked && <MemberWorkingOutBanner />}
 
       <p className={`text-sm ${isMemberView ? "text-gray-500" : "text-gray-500"}`}>
@@ -142,15 +162,23 @@ export function DietPlanEditor({
         </div>
       )}
 
-      {!locked && !isMemberView && (
+      {!locked && !isMemberView && !loadError && (
         <>
           {message && (
-            <p className="text-center text-sm text-lime-600">{message}</p>
+            <p
+              className={`text-center text-sm ${
+                message.includes("실패") || message.includes("permission")
+                  ? "text-red-600"
+                  : "text-lime-600"
+              }`}
+            >
+              {message}
+            </p>
           )}
           <button
             type="button"
             onClick={save}
-            disabled={saving}
+            disabled={saving || !trainerId}
             className="btn-primary w-full"
           >
             {saving ? "저장 중..." : "식단 가이드 저장"}

@@ -10,6 +10,15 @@ const geistSans = Geist({
 export const metadata: Metadata = {
   title: "SmarPt - PT 트레이너 & 회원 운동 기록",
   description: "트레이너와 회원을 연결하는 운동·식단 기록 및 채팅 앱",
+  icons: {
+    icon: "/logo.png",
+    apple: "/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "SmarPt",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {

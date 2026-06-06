@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, ClipboardList } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isMemberWorkingOut } from "@/lib/active-workout-sync";
+import { toDateString } from "@/lib/utils";
 import { WorkoutPlanEditor } from "@/components/plans/WorkoutPlanEditor";
 import { DietPlanEditor } from "@/components/plans/DietPlanEditor";
 import { MemberWorkingOutBanner } from "@/components/plans/MemberWorkingOutBanner";
@@ -24,9 +25,13 @@ export default function TrainerMemberRoutinePage({
   const [tab, setTab] = useState<PlanTab>("workout");
   const [memberActive, setMemberActive] = useState(false);
 
+  const todayStr = toDateString(new Date());
+
   const checkActive = useCallback(async () => {
-    setMemberActive(await isMemberWorkingOut(supabase, memberId));
-  }, [supabase, memberId]);
+    setMemberActive(
+      await isMemberWorkingOut(supabase, memberId, todayStr)
+    );
+  }, [supabase, memberId, todayStr]);
 
   useEffect(() => {
     const init = async () => {
@@ -105,7 +110,11 @@ export default function TrainerMemberRoutinePage({
           showActiveBanner={false}
         />
       ) : (
-        <DietPlanEditor memberId={memberId} trainerId={trainerId} />
+        <DietPlanEditor
+          memberId={memberId}
+          trainerId={trainerId}
+          locked={false}
+        />
       )}
     </div>
   );

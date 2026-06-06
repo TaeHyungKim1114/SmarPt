@@ -36,13 +36,24 @@ export function WorkoutPlanEditor({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
-    const plan = await fetchWorkoutPlan(supabase, memberId);
-    setExercises(plan?.exercises ?? []);
-    setNotes(plan?.notes ?? "");
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const plan = await fetchWorkoutPlan(supabase, memberId);
+      setExercises(plan?.exercises ?? []);
+      setNotes(plan?.notes ?? "");
+    } catch (e) {
+      setLoadError(
+        e instanceof Error ? e.message : "운동 가이드를 불러오지 못했습니다."
+      );
+      setExercises([]);
+      setNotes("");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -72,9 +83,8 @@ export function WorkoutPlanEditor({
       onSaved?.();
       await load();
     } catch (e) {
-      setMessage(
-        e instanceof Error ? e.message : "저장에 실패했습니다."
-      );
+      const msg = e instanceof Error ? e.message : "저장에 실패했습니다.";
+      setMessage(msg.includes("저장") ? msg : `저장 실패: ${msg}`);
     } finally {
       setSaving(false);
     }
@@ -90,7 +100,24 @@ export function WorkoutPlanEditor({
 
   return (
     <div className="space-y-4">
+      {loadError && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+          {loadError}
+          <span className="mt-1 block text-xs text-red-500/90">
+            Supabase SQL Editor에서 supabase/fix-member-plans-rls.sql 을
+            실행해 주세요.
+          </span>
+        </p>
+      )}
+
       {showActiveBanner && locked && <MemberWorkingOutBanner />}
+
+      {locked && !showActiveBanner && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          회원이 오늘 운동 중이라 운동 가이드 수정이 잠시 잠겨 있습니다. 운동
+          종료 후 다시 시도해 주세요.
+        </p>
+      )}
 
       <p className="text-sm text-gray-500">
         트레이너가 정한 기본 운동 루틴입니다. 오늘 기록이 없을 때 이 루틴이
@@ -218,12 +245,14 @@ export function WorkoutPlanEditor({
         />
       </div>
 
-      {!locked && (
+      {!locked && !loadError && (
         <>
           {message && (
             <p
               className={`text-center text-sm ${
-                message.includes("저장") ? "text-lime-600" : "text-red-600"
+                message.includes("실패") || message.includes("permission")
+                  ? "text-red-600"
+                  : "text-lime-600"
               }`}
             >
               {message}
@@ -232,7 +261,7 @@ export function WorkoutPlanEditor({
           <button
             type="button"
             onClick={save}
-            disabled={saving}
+            disabled={saving || !trainerId}
             className="btn-primary w-full"
           >
             {saving ? "저장 중..." : "운동 루틴 저장"}
