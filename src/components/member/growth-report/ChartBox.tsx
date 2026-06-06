@@ -9,9 +9,14 @@ import {
   type ReactElement,
 } from "react";
 
+type ChartChildProps = {
+  width?: number;
+  height?: number;
+};
+
 type ChartBoxProps = {
   height: number;
-  children: ReactElement;
+  children: ReactElement<ChartChildProps>;
 };
 
 /** 부모 너비를 측정한 뒤 차트에 고정 px 크기를 넘깁니다 (ResponsiveContainer -1 경고 방지). */
